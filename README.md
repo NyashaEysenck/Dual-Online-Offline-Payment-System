@@ -1,6 +1,3 @@
-Here is the updated README file with the specific instructions included:
-
----
 
 # Dual Online-Offline Payment System
 
@@ -76,8 +73,5 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Contact
 
-For any questions or suggestions, please open an issue or contact us directly at [email@example.com].
+For any questions or suggestions, please open an issue or contact me directly.
 
----
-
-Feel free to adjust any sections as needed.
