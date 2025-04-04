@@ -62,6 +62,7 @@ Welcome to the Dual Online-Offline Payment System, a robust POS system designed 
 
 We welcome contributions to help complete the NFC and Bluetooth web connections part of this project. Here are some ways you can contribute:
 
+- **Implementing encryption mechanisms**: Help in setting up reliable encryption for offline dats.
 - **Implementing NFC functionality**: Help in integrating NFC for contactless payments.
 - **Implementing Bluetooth functionality**: Assist in enabling Bluetooth connections for payment processing.
 
