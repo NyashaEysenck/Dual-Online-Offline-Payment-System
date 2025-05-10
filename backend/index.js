@@ -1,24 +1,8 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const https = require('https'); // Add this
-const fs = require('fs'); // Add this
 require('dotenv').config();
- // In Node.js backend code
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-// 1. Load mkcert root CA
-const caPath = `C:/Users/Administrator/AppData/Local/mkcert/rootCA.pem`; // Adjust path if needed
-const caCert = fs.readFileSync(caPath);
-
-// 2. HTTPS options for Express
-const options = {
-  key: fs.readFileSync('192.168.131.181-key.pem'), // Your mkcert-generated key
-  cert: fs.readFileSync('192.168.131.181.pem'),    // Your mkcert-generated cert
-  ca: caCert, // Trust mkcert's root CA
-  requestCert: false,
-  rejectUnauthorized: true, // Now safe to enable
-};
 const authRoutes = require('./routes/auth');
 const transactionRoutes = require('./routes/transaction');
 const deviceRoutes = require('./routes/device');
@@ -30,12 +14,10 @@ const app = express();
 // Middleware
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || origin.startsWith('http://192.168.1.') || origin.startsWith('https://192.168.1.') || 
-        origin.startsWith('http://192.168.131.') || origin.startsWith('https://192.168.131.') || 
-        origin === 'https://localhost:5173') {
+    if (!origin || origin === 'http://localhost:5173') {
       callback(null, true);
     } else {
-      callback(null, false); // Allow other origins
+      callback(null, false);
     }
   },
   credentials: true,
@@ -71,9 +53,8 @@ app.get('/api/health', (req, res) => {
 // Error handling middleware
 app.use(errorHandler);
 
- 
-// Create HTTPS server instead of HTTP
+// Start HTTP server
 const PORT = process.env.PORT || 5000;
-https.createServer(options, app).listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running in HTTPS mode on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
