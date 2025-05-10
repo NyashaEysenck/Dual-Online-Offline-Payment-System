@@ -36,9 +36,9 @@ Welcome to the Dual Online-Offline Payment System, a robust POS system designed 
     npm install
     ```
 
-3. **Start the frontend development server**:
+3. **Build the frontend**:
     ```bash
-    npm run dev
+    npm run build
     ```
 
 4. **Open a new terminal, navigate to the backend directory and install dependencies**:
@@ -50,6 +50,7 @@ Welcome to the Dual Online-Offline Payment System, a robust POS system designed 
 5. **Start the backend server**:
     ```bash
     node index
+    (Frontend is served from the backend open the url)
     ```
 
 ## Usage
