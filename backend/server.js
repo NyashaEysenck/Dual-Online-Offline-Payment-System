@@ -5,46 +5,14 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const ip = require('ip');
 const qrcode = require('qrcode');
-const fs = require('fs');
-const https = require('https');
 const http = require('http');
 
-// In Node.js backend code
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
-// 1. Load mkcert root CA
-const caPath = `C:/Users/Administrator/AppData/Local/mkcert/rootCA.pem`; // Adjust path if needed
-let caCert;
-try {
-  caCert = fs.readFileSync(caPath);
-} catch (error) {
-  console.warn('Could not load CA certificate, proceeding without it:', error.message);
-}
-
-// 2. HTTPS options for Express
-let options;
-try {
-  options = {
-    key: fs.readFileSync('192.168.131.181-key.pem'), // Your mkcert-generated key
-    cert: fs.readFileSync('192.168.131.181.pem'),    // Your mkcert-generated cert
-    ca: caCert, // Trust mkcert's root CA
-    requestCert: false,
-    rejectUnauthorized: false, // Set to false to allow connections without valid certificates
-  };
-} catch (error) {
-  console.warn('Could not load SSL certificates, falling back to HTTP:', error.message);
-  options = null;
-}
-
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 5000; // Changed to 5000 to match the frontend proxy
 
-// CORS Configuration - Allow requests from all origins in development
+// CORS Configuration
 const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl requests)
-    callback(null, true);
-  },
+  origin: 'http://localhost:5173', // Updated to match the Vite dev server
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -60,9 +28,8 @@ app.use(express.static(path.join(__dirname, '../frontend/dist')));
 const transactions = [];
 
 // Get local IP address
-const localIpAddress = ip.address();
-const protocol = options ? 'https' : 'http';
-const serverUrl = `${protocol}://${localIpAddress}:${PORT}`;
+const localIpAddress = 'localhost';
+const serverUrl = `http://${localIpAddress}:${PORT}`;
 
 // Generate QR code with server URL
 const generateQRCode = async () => {
@@ -208,11 +175,11 @@ app.get('/api/transactions/:id', (req, res) => {
   try {
     const { id } = req.params;
     const transaction = transactions.find(tx => tx.id === id || tx.receiptId === id);
-    
+
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
-    
+
     res.json(transaction);
   } catch (error) {
     console.error('Error getting transaction:', error);
@@ -226,20 +193,10 @@ app.get('*', (req, res) => {
 });
 
 // Start the server
-let server;
-if (options) {
-  // Start HTTPS server
-  server = https.createServer(options, app);
-  server.listen(PORT, () => {
-    console.log(`HTTPS Server running at ${serverUrl}`);
-  });
-} else {
-  // Fallback to HTTP server
-  server = http.createServer(app);
-  server.listen(PORT, () => {
-    console.log(`HTTP Server running at ${serverUrl}`);
-  });
-}
+const server = http.createServer(app);
+server.listen(PORT, () => {
+  console.log(`HTTP Server running at ${serverUrl}`);
+});
 
 // Handle server errors
 server.on('error', (error) => {
