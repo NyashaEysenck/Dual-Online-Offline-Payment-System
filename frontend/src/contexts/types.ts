@@ -1,4 +1,3 @@
-// frontend/src/contexts/wallet/types.ts
 import { ReactNode } from "react";
 
 export interface Transaction {
@@ -26,7 +25,7 @@ export interface Transaction {
 }
 
 export interface SendMoneyParams {
-  sender: String;
+  sender: string;
   amount: number;
   recipient: string;
   note?: string;
@@ -43,7 +42,7 @@ export interface WalletContextType {
   releaseTokens: (amount: number) => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, "id" | "date">) => Promise<void>;
   addFunds: (amount: number) => Promise<void>;
-  sendMoney: (params: SendMoneyParams) => Promise<void>;
+  sendMoney: (params: SendMoneyParams) => Promise<any>;
   fetchWalletData: () => Promise<void>;
 }
 

@@ -1,4 +1,3 @@
-// frontend/src/contexts/wallet/WalletContext.tsx
 import { createContext, useContext } from "react";
 import { useWalletState } from "./useWalletState";
 import { WalletContextType, WalletProviderProps } from "./types";

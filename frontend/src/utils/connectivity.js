@@ -4,18 +4,14 @@ import { syncOfflineTransactions, confirmPendingTransactions } from '@/services/
 import { toast } from '@/components/ui/use-toast';
 
 /**
- * Checks if the online backend server (index.js) is accessible
+ * Checks if the online backend server is accessible
  * @returns {Promise<boolean>} True if online, false if offline
  */
 export const checkOnlineStatus = async () => {
   try {
-    // Try to access the main backend server (not the local offline server)
-    // Set a short timeout to avoid long waits
+    // Try to access the health endpoint with a short timeout
     const response = await api.get('/health', { 
       timeout: 3000,
-      // Don't retry on failure
-      retry: 0,
-      // Don't throw on error status codes
       validateStatus: () => true
     });
     
@@ -40,6 +36,17 @@ export const handleConnectionChange = async (isOnline, wasOnline, indexedDB, ref
     try {
       // Get all transactions from IndexedDB
       const transactions = await indexedDB.getAllItems();
+      
+      if (transactions.length === 0) {
+        return; // No transactions to sync
+      }
+      
+      // Show syncing toast
+      toast({
+        title: "Syncing Transactions",
+        description: "Syncing your offline transactions...",
+        duration: 3000,
+      });
       
       // Sync offline transactions
       const { synced, pending, failed } = await syncOfflineTransactions(

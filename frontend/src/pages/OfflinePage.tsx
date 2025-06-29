@@ -17,34 +17,68 @@ import {
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 const OfflinePage = () => {
   const { balance, reservedBalance, reserveTokens, releaseTokens } = useWallet();
   const { offlineBalance, pendingTransactions, refreshOfflineBalance } = useOfflineBalance();
   const [reserveAmount, setReserveAmount] = useState(20);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   // Calculate available balance
   const availableBalance = balance;
-  const maxReserveAmount = availableBalance > 0 ? availableBalance : 0;
+  const maxReserveAmount = Math.min(500, Math.max(availableBalance, 0));
 
   // Refresh offline balance when component mounts
   useEffect(() => {
     refreshOfflineBalance();
   }, [refreshOfflineBalance]);
 
-  const handleReserveTokens = () => {
-    reserveTokens(reserveAmount);
+  const handleReserveTokens = async () => {
+    if (reserveAmount <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a positive amount to reserve",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (reserveAmount > availableBalance) {
+      toast({
+        title: "Insufficient Balance",
+        description: "You don't have enough funds to reserve this amount",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    await reserveTokens(reserveAmount);
     setReserveAmount(Math.min(20, maxReserveAmount - reserveAmount));
   };
 
-  const handleReleaseTokens = () => {
-    releaseTokens(reserveAmount);
+  const handleReleaseTokens = async () => {
+    if (reserveAmount <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a positive amount to release",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (reserveAmount > reservedBalance) {
+      toast({
+        title: "Insufficient Reserved Balance",
+        description: "You don't have enough reserved funds to release this amount",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    await releaseTokens(reserveAmount);
     setReserveAmount(Math.min(20, maxReserveAmount + reserveAmount));
-  };
-
-  const formatSliderValue = (value: number[]) => {
-    return `$${value[0].toFixed(2)}`;
   };
 
   return (
@@ -108,7 +142,7 @@ const OfflinePage = () => {
                 <GreenButton 
                   onClick={handleReserveTokens}
                   className="flex-1 flex items-center justify-center gap-1"
-                  disabled={availableBalance <= 0 || reserveAmount <= 0}
+                  disabled={availableBalance <= 0 || reserveAmount <= 0 || reserveAmount > availableBalance}
                 >
                   <Lock size={16} />
                   Reserve Tokens
@@ -117,7 +151,7 @@ const OfflinePage = () => {
                   variant="secondary"
                   onClick={handleReleaseTokens}
                   className="flex-1 flex items-center justify-center gap-1"
-                  disabled={reservedBalance <= 0 || reserveAmount <= 0}
+                  disabled={reservedBalance <= 0 || reserveAmount <= 0 || reserveAmount > reservedBalance}
                 >
                   <Unlock size={16} />
                   Release Tokens
@@ -133,23 +167,6 @@ const OfflinePage = () => {
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <button 
-              onClick={() => navigate("/send")}
-              className="group p-6 rounded-lg border border-gray-200 hover:border-greenleaf-300 transition-colors text-left"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-greenleaf-100 flex items-center justify-center group-hover:bg-greenleaf-200 transition-colors">
-                  <ScanLine size={24} className="text-greenleaf-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-dark">Create request</h3>
-                  <p className="text-sm text-dark-lighter">
-                    Generate a payment request QR code to send money
-                  </p>
-                </div>
-              </div>
-            </button>
-
-            <button 
               onClick={() => navigate("/request")}
               className="group p-6 rounded-lg border border-gray-200 hover:border-greenleaf-300 transition-colors text-left"
             >
@@ -158,9 +175,26 @@ const OfflinePage = () => {
                   <QrCode size={24} className="text-greenleaf-600" />
                 </div>
                 <div>
+                  <h3 className="font-semibold text-dark">Create request</h3>
+                  <p className="text-sm text-dark-lighter">
+                    Generate a payment request QR code
+                  </p>
+                </div>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => navigate("/send")}
+              className="group p-6 rounded-lg border border-gray-200 hover:border-greenleaf-300 transition-colors text-left"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-greenleaf-100 flex items-center justify-center group-hover:bg-greenleaf-200 transition-colors">
+                  <ScanLine size={24} className="text-greenleaf-600" />
+                </div>
+                <div>
                   <h3 className="font-semibold text-dark">Scan to pay</h3>
                   <p className="text-sm text-dark-lighter">
-                    Scan a payment request QR code to receive money offline
+                    Scan a payment request QR code
                   </p>
                 </div>
               </div>
@@ -177,7 +211,7 @@ const OfflinePage = () => {
                 <div>
                   <h3 className="font-semibold text-dark">Start Payment Server</h3>
                   <p className="text-sm text-dark-lighter">
-                    Create a Wi-Fi hotspot and host a payment server
+                    Create a payment server for others to connect
                   </p>
                 </div>
               </div>
@@ -218,14 +252,14 @@ const OfflinePage = () => {
               </p>
               <h4 className="font-semibold text-dark mt-3">Dual-Save Offline Transactions</h4>
               <p className="text-dark-lighter text-sm mt-1">
-                Our new dual-save feature allows two devices to transact completely offline:
-                <ul className="list-disc pl-5 mt-2 space-y-1">
-                  <li>Device A starts a Wi-Fi hotspot and hosts a local payment server</li>
-                  <li>Device B connects to the hotspot and scans the QR code</li>
-                  <li>Both devices save the same transaction receipt to their local storage</li>
-                  <li>No internet connection required - works completely offline!</li>
-                </ul>
+                Our dual-save feature allows two devices to transact completely offline:
               </p>
+              <ul className="list-disc pl-5 mt-2 space-y-1 text-sm text-dark-lighter">
+                <li>Device A starts a Wi-Fi hotspot and hosts a local payment server</li>
+                <li>Device B connects to the hotspot and scans the QR code</li>
+                <li>Both devices save the same transaction receipt to their local storage</li>
+                <li>No internet connection required - works completely offline!</li>
+              </ul>
             </div>
           </div>
         </WhiteCard>

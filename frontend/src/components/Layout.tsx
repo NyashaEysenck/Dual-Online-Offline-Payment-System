@@ -1,11 +1,12 @@
 import { ReactNode, useState, useEffect, useCallback } from "react";
-import { useLocation, Link } from "react-router-dom";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 import { Menu, X, Home, Send, Download, CreditCard, Settings, LogOut, WifiOff, Wifi, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { checkOnlineStatus, startOnlineStatusMonitor } from "@/utils/connectivity";
 import { useIndexedDB } from "@/hooks/useIndexedDB";
 import { useOfflineBalance } from "@/contexts/OfflineBalanceContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 type LayoutProps = {
   children: ReactNode;
@@ -19,10 +20,12 @@ const Layout = ({ children }: LayoutProps) => {
     return savedCollapsed ? JSON.parse(savedCollapsed) : false;
   });
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout, user } = useAuth();
   const [isOnline, setIsOnline] = useState(() => {
     // Initialize with the last known online status from localStorage if available
     const savedStatus = typeof window !== 'undefined' ? localStorage.getItem('onlineStatus') : null;
-    return savedStatus ? savedStatus === 'true' : false;
+    return savedStatus ? savedStatus === 'true' : true;
   });
   const { refreshOfflineBalance } = useOfflineBalance();
   
@@ -40,6 +43,12 @@ const Layout = ({ children }: LayoutProps) => {
       return newState;
     });
   }, []);
+
+  // Handle logout
+  const handleLogout = useCallback(() => {
+    logout();
+    navigate('/login');
+  }, [logout, navigate]);
 
   // Check online status only once when the component mounts
   useEffect(() => {
@@ -105,7 +114,7 @@ const Layout = ({ children }: LayoutProps) => {
       >
         <div className="flex h-16 items-center justify-between border-b px-6">
           {!sidebarCollapsed && (
-            <h1 className="text-xl font-bold text-greenleaf-600">GreenLeaf</h1>
+            <h1 className="text-xl font-bold text-greenleaf-600">NexaPay</h1>
           )}
           <button 
             onClick={toggleSidebarCollapsed}
@@ -153,10 +162,13 @@ const Layout = ({ children }: LayoutProps) => {
             )}
             {!sidebarCollapsed && (isOnline ? "Online" : "Offline")}
           </button>
-          <button className={cn(
-            "flex w-full items-center rounded-md px-4 py-3 text-red-600 hover:bg-gray-100",
-            sidebarCollapsed && "justify-center"
-          )}>
+          <button 
+            className={cn(
+              "flex w-full items-center rounded-md px-4 py-3 text-red-600 hover:bg-gray-100",
+              sidebarCollapsed && "justify-center"
+            )}
+            onClick={handleLogout}
+          >
             <LogOut size={20} className={sidebarCollapsed ? "mx-auto" : "mr-3"} />
             {!sidebarCollapsed && "Logout"}
           </button>
@@ -205,6 +217,12 @@ const Layout = ({ children }: LayoutProps) => {
                     </>
                   )}
                 </div>
+                
+                {user && (
+                  <div className="ml-4 text-sm font-medium text-gray-700">
+                    {user.username}
+                  </div>
+                )}
               </div>
             </div>
           </div>

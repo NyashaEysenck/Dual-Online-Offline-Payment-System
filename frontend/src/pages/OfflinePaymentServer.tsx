@@ -30,13 +30,12 @@ const OfflinePaymentServer: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [onlineTransactions, setOnlineTransactions] = useState<Transaction[]>([]);
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
   const [isOnline, setIsOnline] = useState(false);
   const [checkingOnlineStatus, setCheckingOnlineStatus] = useState(false);
   
-  const { getAllItems, addItem, error: dbError } = useIndexedDB({
-    dbName: 'offlinePayments',
+  const { getAllItems, addItem } = useIndexedDB({
+    dbName: 'greenleaf-finance',
     storeName: 'transactions',
   });
 
@@ -65,7 +64,7 @@ const OfflinePaymentServer: React.FC = () => {
 
   useEffect(() => {
     // No need to redirect in offline mode
-    if (!user && !isOnline) {
+    if (!user && isOnline) {
       navigate('/login');
     }
   }, [user, navigate, isOnline]);
@@ -79,93 +78,87 @@ const OfflinePaymentServer: React.FC = () => {
     };
   }, [pollingInterval]);
 
-  // Fetch online transactions from the backend
-  const fetchOnlineTransactions = useCallback(async () => {
-    if (!isOnline || !user) return;
-    
-    try {
-      const response = await api.get('/api/transactions');
-      if (response.status === 200) {
-        setOnlineTransactions(response.data);
-      }
-    } catch (err) {
-      console.error('Error fetching online transactions:', err);
-    }
-  }, [isOnline, user]);
-
   // Fetch offline transactions from IndexedDB
   const fetchOfflineTransactions = useCallback(async () => {
     try {
       const items = await getAllItems<Transaction>();
       console.log('Fetched transactions from IndexedDB:', items);
       
-      // Check if there are new transactions
-      const newTransactions = items.filter(
-        item => !transactions.some(tx => tx.id === item.id)
+      // Filter for transactions where current user is the recipient
+      const receivedTransactions = items.filter(
+        item => user?.email && item.recipient === user.email
       );
       
       // Update offline balance for new transactions
-      if (newTransactions.length > 0 && user?.email) {
-        newTransactions.forEach(tx => {
-          if (tx.recipient === user.email) {
-            // Money received (add to balance)
-            updateOfflineBalance(parseFloat(tx.amount.toString()));
-          }
-        });
+      if (receivedTransactions.length > 0 && user?.email) {
+        // Check for new transactions
+        const newTransactions = receivedTransactions.filter(
+          tx => !transactions.some(existingTx => existingTx.id === tx.id)
+        );
         
-        // Refresh the full offline balance
-        refreshOfflineBalance();
+        if (newTransactions.length > 0) {
+          // Update balance for new transactions
+          newTransactions.forEach(tx => {
+            updateOfflineBalance(parseFloat(tx.amount.toString()));
+          });
+          
+          // Refresh the full offline balance
+          refreshOfflineBalance();
+          
+          // Notify user of new transactions
+          if (newTransactions.length === 1) {
+            toast({
+              title: "New Payment Received",
+              description: `You received $${newTransactions[0].amount.toFixed(2)} from ${newTransactions[0].sender}`,
+            });
+          } else {
+            toast({
+              title: "New Payments Received",
+              description: `You received ${newTransactions.length} new payments`,
+            });
+          }
+        }
       }
       
-      setTransactions(items || []);
+      setTransactions(receivedTransactions);
     } catch (err) {
       console.error('Error fetching offline transactions:', err);
     }
-  }, [getAllItems, transactions, user, updateOfflineBalance, refreshOfflineBalance]);
-
-  const fetchTransactions = useCallback(async () => {
-    // Fetch both online and offline transactions
-    await fetchOfflineTransactions();
-    
-    if (isOnline) {
-      await fetchOnlineTransactions();
-    }
-  }, [fetchOfflineTransactions, fetchOnlineTransactions, isOnline]);
+  }, [getAllItems, transactions, user, updateOfflineBalance, refreshOfflineBalance, toast]);
 
   useEffect(() => {
-    fetchTransactions();
+    fetchOfflineTransactions();
     
     // Set up polling for transactions
-    const interval = setInterval(fetchTransactions, 5000);
+    const interval = setInterval(fetchOfflineTransactions, 5000);
     setPollingInterval(interval);
     
     return () => {
       clearInterval(interval);
     };
-  }, [fetchTransactions]);
+  }, [fetchOfflineTransactions]);
 
   const startServer = async () => {
     setLoading(true);
     setError(null);
     
     try {
-      // In a real application, we would start the server process here
-      // For this demo, we'll simulate starting the server and generate a QR code
+      // Get server info from the backend
+      const response = await api.get('/server-info');
       
-      // Get the local IP address (in a real app, this would come from the server)
-      const ipAddress = window.location.hostname === 'localhost' ? '192.168.1.43' : window.location.hostname;
-      const port = '3001'; // This should match the port in server.js
+      if (!response.data || !response.data.serverUrl) {
+        throw new Error('Failed to get server information');
+      }
       
-      // Always use HTTPS for the server URL since our backend is configured for HTTPS
-      const serverUrl = `https://${ipAddress}:${port}`;
-      
-      // Generate a data URL for the QR code (this is normally done by the server)
-      // Here we're just creating a URL that the client can use to connect
-      const qrCodeData = serverUrl;
+      // Add user email as a query parameter to the server URL
+      const serverUrl = new URL(response.data.serverUrl);
+      if (user?.email) {
+        serverUrl.searchParams.append('user', user.email);
+      }
       
       setServerInfo({
-        serverUrl,
-        qrCodeDataUrl: qrCodeData,
+        serverUrl: serverUrl.toString(),
+        qrCodeDataUrl: serverUrl.toString(),
       });
       
       toast({
@@ -183,7 +176,6 @@ const OfflinePaymentServer: React.FC = () => {
 
   const stopServer = () => {
     setServerInfo(null);
-    setTransactions([]);
     
     if (pollingInterval) {
       clearInterval(pollingInterval);
@@ -196,9 +188,6 @@ const OfflinePaymentServer: React.FC = () => {
       duration: 3000,
     });
   };
-
-  // Get the correct transactions based on online/offline status
-  const displayTransactions = isOnline ? onlineTransactions : transactions;
 
   return (
     <Layout>
@@ -315,22 +304,13 @@ const OfflinePaymentServer: React.FC = () => {
                 <h2 className="text-lg font-semibold">Recent Transactions</h2>
                 <div className="flex items-center gap-2">
                   <div className="text-sm text-gray-500 flex items-center gap-1">
-                    {isOnline ? (
-                      <>
-                        <Globe className="h-4 w-4" />
-                        <span>Online</span>
-                      </>
-                    ) : (
-                      <>
-                        <Smartphone className="h-4 w-4" />
-                        <span>Local</span>
-                      </>
-                    )}
+                    <Smartphone className="h-4 w-4" />
+                    <span>Local</span>
                   </div>
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={fetchTransactions}
+                    onClick={fetchOfflineTransactions}
                   >
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Refresh
@@ -338,7 +318,7 @@ const OfflinePaymentServer: React.FC = () => {
                 </div>
               </div>
               
-              {displayTransactions.length === 0 ? (
+              {transactions.length === 0 ? (
                 <div className="text-center py-8">
                   <Smartphone className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-500">No transactions yet</p>
@@ -348,11 +328,11 @@ const OfflinePaymentServer: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {displayTransactions.map((tx) => (
+                  {transactions.map((tx) => (
                     <div key={tx.id} className="p-4 border rounded-lg">
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <h3 className="font-medium">{tx.recipient}</h3>
+                          <h3 className="font-medium">From: {tx.sender}</h3>
                           <p className="text-sm text-gray-500">{new Date(tx.timestamp).toLocaleString()}</p>
                         </div>
                         <div className="text-right">

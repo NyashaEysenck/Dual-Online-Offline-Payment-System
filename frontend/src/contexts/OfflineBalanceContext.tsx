@@ -79,6 +79,10 @@ export const OfflineBalanceProvider: React.FC<OfflineBalanceProviderProps> = ({ 
   useEffect(() => {
     if (user) {
       calculateOfflineBalance();
+    } else {
+      // Reset state when user logs out
+      setOfflineBalance(0);
+      setPendingTransactions(0);
     }
   }, [user]);
 
