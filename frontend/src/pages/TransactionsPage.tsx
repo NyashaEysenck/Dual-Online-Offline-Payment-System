@@ -1,88 +1,70 @@
-
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Layout from "@/components/Layout";
 import WhiteCard from "@/components/WhiteCard";
 import TransactionItem from "@/components/TransactionItem";
 import { useWallet } from "@/contexts/WalletContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { 
   Filter, 
   Search, 
   Calendar, 
-  Download,
-  ChevronLeft,
-  ChevronRight
+  Download
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 
 const TransactionsPage = () => {
   const { transactions } = useWallet();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("all");
   const [filterDate, setFilterDate] = useState("all-time");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
 
   // Filter and sort transactions
-  const filteredTransactions = transactions
-    .filter(tx => {
-      // Filter by search term
-      if (searchTerm && !tx.description.toLowerCase().includes(searchTerm.toLowerCase()) && 
-          !tx.recipient.toLowerCase().includes(searchTerm.toLowerCase())) {
-        return false;
-      }
-      
-      // Filter by type
-      if (filterType !== "all" && tx.type !== filterType) {
-        return false;
-      }
-      
-      // Filter by date
-      if (filterDate !== "all-time") {
-        const now = new Date();
-        const txDate = new Date(tx.date);
-        
-        if (filterDate === "today" && 
-            !(txDate.getDate() === now.getDate() && 
-              txDate.getMonth() === now.getMonth() && 
-              txDate.getFullYear() === now.getFullYear())) {
+  const filteredTransactions = useMemo(() => {
+    return transactions
+      .filter(tx => {
+        // Filter by search term
+        if (searchTerm && !tx.note?.toLowerCase().includes(searchTerm.toLowerCase())) {
           return false;
         }
         
-        if (filterDate === "this-week") {
-          const startOfWeek = new Date(now);
-          startOfWeek.setDate(now.getDate() - now.getDay());
-          startOfWeek.setHours(0, 0, 0, 0);
-          
-          if (txDate < startOfWeek) return false;
+        // Filter by type
+        if (filterType !== "all" && tx.transaction_type !== filterType) {
+          return false;
         }
         
-        if (filterDate === "this-month") {
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-          if (txDate < startOfMonth) return false;
+        // Filter by date
+        if (filterDate !== "all-time") {
+          const now = new Date();
+          const txDate = new Date(tx.created_at);
+          
+          if (filterDate === "today" && 
+              !(txDate.getDate() === now.getDate() && 
+                txDate.getMonth() === now.getMonth() && 
+                txDate.getFullYear() === now.getFullYear())) {
+            return false;
+          }
+          
+          if (filterDate === "this-week") {
+            const startOfWeek = new Date(now);
+            startOfWeek.setDate(now.getDate() - now.getDay());
+            startOfWeek.setHours(0, 0, 0, 0);
+            
+            if (txDate < startOfWeek) return false;
+          }
+          
+          if (filterDate === "this-month") {
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            if (txDate < startOfMonth) return false;
+          }
         }
-      }
-      
-      return true;
-    })
-    .sort((a, b) => b.date.getTime() - a.date.getTime());
-  
-  // Implement pagination
-  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
-  const paginatedTransactions = filteredTransactions.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+        
+        return true;
+      })
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [transactions, searchTerm, filterType, filterDate]);
 
   const handleClearFilters = () => {
     setSearchTerm("");
@@ -122,8 +104,6 @@ const TransactionsPage = () => {
                   <SelectItem value="deposit">Deposits</SelectItem>
                   <SelectItem value="withdrawal">Withdrawals</SelectItem>
                   <SelectItem value="payment">Payments</SelectItem>
-                  <SelectItem value="receipt">Receipts</SelectItem>
-                  <SelectItem value="transfer">Transfers</SelectItem>
                 </SelectContent>
               </Select>
               
@@ -167,11 +147,12 @@ const TransactionsPage = () => {
           
           {/* Transactions List */}
           <div className="space-y-3">
-            {paginatedTransactions.length > 0 ? (
-              paginatedTransactions.map((transaction) => (
+            {filteredTransactions.length > 0 ? (
+              filteredTransactions.map((transaction) => (
                 <TransactionItem 
-                  key={transaction.id} 
-                  {...transaction} 
+                  key={transaction.transaction_id} 
+                  transaction={transaction}
+                  currentUserId={user?._id}
                   showDate
                 />
               ))
@@ -185,65 +166,6 @@ const TransactionsPage = () => {
               </div>
             )}
           </div>
-          
-          {/* Pagination */}
-          {filteredTransactions.length > 0 && (
-            <Pagination className="mt-6">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious 
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
-                  />
-                </PaginationItem>
-                
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum = i + 1;
-                  
-                  // Adjust page numbers if we're near the end
-                  if (totalPages > 5 && currentPage > 3) {
-                    pageNum = currentPage - 3 + i;
-                    if (pageNum > totalPages) pageNum = totalPages - (4 - i);
-                  }
-                  
-                  if (pageNum > 0 && pageNum <= totalPages) {
-                    return (
-                      <PaginationItem key={pageNum}>
-                        <PaginationLink
-                          isActive={currentPage === pageNum}
-                          onClick={() => setCurrentPage(pageNum)}
-                        >
-                          {pageNum}
-                        </PaginationLink>
-                      </PaginationItem>
-                    );
-                  }
-                  return null;
-                })}
-                
-                {totalPages > 5 && currentPage < totalPages - 2 && (
-                  <PaginationItem>
-                    <PaginationEllipsis />
-                  </PaginationItem>
-                )}
-                
-                {totalPages > 5 && currentPage < totalPages - 1 && (
-                  <PaginationItem>
-                    <PaginationLink onClick={() => setCurrentPage(totalPages)}>
-                      {totalPages}
-                    </PaginationLink>
-                  </PaginationItem>
-                )}
-                
-                <PaginationItem>
-                  <PaginationNext 
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          )}
         </WhiteCard>
       </div>
     </Layout>

@@ -3,7 +3,6 @@ import {
   ArrowUpRight, 
   ArrowDownLeft, 
   CreditCard, 
-  SendHorizontal, 
   Clock, 
   CheckCircle2, 
   XCircle 
@@ -15,22 +14,23 @@ interface TransactionItemProps {
     transaction_id: string;
     amount: number;
     note?: string | null;
-    created_at: Date;
+    created_at: string | Date;
     status: "pending" | "completed" | "failed" | "conflict";
     offline_method?: "QR" | "Bluetooth" | null;
     transaction_type: "deposit" | "withdrawal" | "payment";
-    // Additional props needed for display
-    currentUserId: string; // To determine if this is incoming or outgoing
-    receiver_id: string; // From Transaction type
+    sender_id?: string;
+    receiver_id?: string;
   };
+  currentUserId?: string;
   showDate?: boolean;
   onClick?: () => void;
 }
 
 const TransactionItem = ({
   transaction,
+  currentUserId,
   onClick,
-  showDate,
+  showDate = false,
 }: TransactionItemProps) => {
   const {
     transaction_id,
@@ -40,17 +40,18 @@ const TransactionItem = ({
     status,
     offline_method,
     transaction_type,
-    currentUserId,
+    sender_id,
     receiver_id,
   } = transaction;
 
   // Determine if this is an incoming or outgoing transaction
-  const isIncoming = receiver_id === currentUserId;
+  const isIncoming = currentUserId ? receiver_id === currentUserId : amount > 0;
   
   // Format date to display in a readable format
+  const transactionDate = new Date(created_at);
   const formattedDate = showDate 
-    ? format(new Date(created_at), "MMM d, yyyy") 
-    : format(new Date(created_at), "MMM d");
+    ? format(transactionDate, "MMM d, yyyy") 
+    : format(transactionDate, "MMM d");
 
   // Icon based on transaction type and direction
   const getIcon = () => {
@@ -86,7 +87,7 @@ const TransactionItem = ({
   };
 
   // Determine display amount (positive for incoming, negative for outgoing)
-  const displayAmount = isIncoming ? Math.abs(amount) : -Math.abs(amount);
+  const displayAmount = Math.abs(amount);
   const description = note || (transaction_type === "payment" 
     ? (isIncoming ? "Received payment" : "Sent payment")
     : transaction_type);
@@ -94,9 +95,9 @@ const TransactionItem = ({
   return (
     <div 
       className={cn(
-        "flex items-center justify-between p-3 rounded-lg transition-colors cursor-pointer",
+        "flex items-center justify-between p-3 rounded-lg transition-colors",
         {
-          "hover:bg-gray-50": onClick,
+          "hover:bg-gray-50 cursor-pointer": onClick,
           "bg-greenleaf-50": offline_method,
         }
       )}
@@ -130,7 +131,7 @@ const TransactionItem = ({
           "text-red-600": !isIncoming,
         }
       )}>
-        {isIncoming ? "+" : "-"}{Math.abs(amount).toFixed(2)}
+        {isIncoming ? "+" : "-"}${displayAmount.toFixed(2)}
       </div>
     </div>
   );

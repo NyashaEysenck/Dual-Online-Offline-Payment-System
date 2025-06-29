@@ -1,4 +1,3 @@
-// AuthContext.tsx  
 import { createContext, useContext, useState, ReactNode, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import api from "@/utils/api";
@@ -21,13 +20,13 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(() => {
-    // Initialize from sessionStorage if available
     const sessionUser = sessionStorage.getItem('sessionUser');
     return sessionUser ? JSON.parse(sessionUser) : null;
   });
@@ -59,7 +58,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       } catch (error) {
         console.error("Session check failed:", error);
-        // Clear invalid session data
         localStorage.removeItem('authToken');
         localStorage.removeItem('lastEmail');
       } finally {
@@ -68,7 +66,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     checkPersistedSession();
-  }, [toast]);
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    if (!user?.email) return;
+    
+    try {
+      const response = await api.post('/auth/user', { email: user.email });
+      const updatedUser = response.data.user;
+      setUser(updatedUser);
+      
+      // Update local storage
+      const salt = updatedUser.crypto_salt || generateSalt();
+      const userToSave = { ...updatedUser, crypto_salt: salt };
+      await saveUser(user.email, userToSave);
+    } catch (error) {
+      console.error("Failed to refresh user:", error);
+    }
+  }, [user?.email]);
 
   const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true);
@@ -95,7 +110,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const response = await api.post('/auth/login', { email, password });
       const { user: remoteUser, token } = response.data;
       
-      // Store the JWT token
       localStorage.setItem('authToken', token);
       
       const salt = remoteUser.crypto_salt || generateSalt();
@@ -140,7 +154,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const { user: remoteUser, token } = response.data;
       
-      // Store the JWT token
       localStorage.setItem('authToken', token);
       
       const encryptionKey = deriveMasterKey(password, salt);
@@ -185,7 +198,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       isLoading,
       login, 
       register, 
-      logout 
+      logout,
+      refreshUser
     }}>
       {children}
     </AuthContext.Provider>

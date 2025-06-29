@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, QrCode, ArrowLeft, Scan, ClipboardPaste, Nfc, Bluetooth, Camera } from "lucide-react";
+import { ArrowLeft, Camera, QrCode, Nfc, Bluetooth } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import GreenButton from "@/components/GreenButton";
 import { useAuth } from "@/contexts/AuthContext";
-import { encryptData, decryptData, deriveMasterKey } from '@/utils/crypto';
+import { decryptData, deriveMasterKey } from '@/utils/crypto';
 import WhiteCard from "@/components/WhiteCard";
 import { useWallet } from "@/contexts/WalletContext";
 import { useNavigate } from "react-router-dom";
@@ -26,95 +26,27 @@ const SendMoney = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [manualEntry, setManualEntry] = useState("");
-  const [nfcStatus, setNfcStatus] = useState<"waiting" | "reading" | "success" | "error">("waiting");
-  const [bluetoothStatus, setBluetoothStatus] = useState<"waiting" | "scanning" | "reading" | "success" | "error">("waiting");
   const [scanning, setScanning] = useState(false);
   const { initNFC, readFromNFC } = useNFC();
-  const { isSupported: isBluetoothSupported, requestDevice, connectToDevice } = useBluetooth();
+  const { isSupported: isBluetoothSupported } = useBluetooth();
 
-  // Initialize NFC and start listener
+  // Initialize NFC
   useEffect(() => {
     const setupNFC = async () => {
       try {
-        const available = await initNFC();
-        if (available && step === "scan") {
-          startNFCListener();
-        }
+        await initNFC();
       } catch (err) {
         console.error("NFC initialization error:", err);
       }
     };
     
     setupNFC();
-    
-    return () => {
-      // Cleanup NFC listeners if needed
-    };
-  }, [step]);
-
-  const startNFCListener = async () => {
-    try {
-      setNfcStatus("waiting");
-      const data = await readFromNFC();
-      if (data) {
-        setNfcStatus("reading");
-        await processPaymentData(data);
-        setNfcStatus("success");
-      }
-    } catch (err) {
-      setNfcStatus("error");
-      setError("Failed to read NFC data. Please try again.");
-      toast({
-        title: "NFC Error",
-        description: "Could not read payment data from NFC",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const startBluetoothListener = async () => {
-    try {
-      setBluetoothStatus("scanning");
-      toast({
-        title: "Scanning for Bluetooth devices",
-        description: "Please select a device to receive payment request from"
-      });
-
-      const device = await requestDevice({
-        acceptAllDevices: true,
-        optionalServices: ['00001234-0000-1000-8000-00805f9b34fb']
-      });
-
-      setBluetoothStatus("reading");
-      toast({
-        title: "Connecting to device",
-        description: "Please wait while we connect to the selected device"
-      });
-
-      const server = await connectToDevice(device);
-      const service = await server.getPrimaryService('00001234-0000-1000-8000-00805f9b34fb');
-      const characteristic = await service.getCharacteristic('00001234-0000-1000-8000-00805f9b34fb');
-      
-      const value = await characteristic.readValue();
-      const decoder = new TextDecoder();
-      const data = decoder.decode(value);
-      
-      await processPaymentData(data);
-      setBluetoothStatus("success");
-    } catch (err) {
-      setBluetoothStatus("error");
-      setError("Failed to read Bluetooth data. Please try again.");
-      toast({
-        title: "Bluetooth Error",
-        description: "Could not read payment data from Bluetooth",
-        variant: "destructive",
-      });
-    }
-  };
+  }, [initNFC]);
 
   const handleQRScan = async (data: string) => {
     try {
       await processPaymentData(data);
+      setScanning(false);
     } catch (err) {
       console.error('QR scan error:', err);
       setError("Invalid QR code. Please try again.");
@@ -129,55 +61,32 @@ const SendMoney = () => {
   const processPaymentData = async (data: string) => {
     if (!user?.crypto_salt) throw new Error("User salt not available");
 
-    // Try to decrypt first (encrypted data)
-    try {
-      const encryptionKey = deriveMasterKey(
-        import.meta.env.VITE_NFC_ENCRYPTION_SECRET,
-        import.meta.env.VITE_NFC_SALT
-      );
-      const decrypted = decryptData(data, encryptionKey);
-      
-      if (decrypted && decrypted.recipient && decrypted.amount) {
-        setPaymentData(decrypted);
-        setStep("confirm");
-        return;
-      }
-    } catch (e) {
-      console.log("Not encrypted with NFC key, trying QR key");
-    }
+    // Try to decrypt with different keys
+    const encryptionKeys = [
+      import.meta.env.VITE_QR_ENCRYPTION_SECRET,
+      import.meta.env.VITE_NFC_ENCRYPTION_SECRET,
+      import.meta.env.VITE_BLUETOOTH_ENCRYPTION_SECRET
+    ];
 
-    // Try QR encryption key if NFC key failed
-    try {
-      const encryptionKey = deriveMasterKey(
-        import.meta.env.VITE_QR_ENCRYPTION_SECRET,
-        import.meta.env.VITE_QR_SALT
-      );
-      const decrypted = decryptData(data, encryptionKey);
-      
-      if (decrypted && decrypted.recipient && decrypted.amount) {
-        setPaymentData(decrypted);
-        setStep("confirm");
-        return;
+    const salts = [
+      import.meta.env.VITE_QR_SALT,
+      import.meta.env.VITE_NFC_SALT,
+      import.meta.env.VITE_BLUETOOTH_SALT
+    ];
+
+    for (let i = 0; i < encryptionKeys.length; i++) {
+      try {
+        const encryptionKey = deriveMasterKey(encryptionKeys[i], salts[i]);
+        const decrypted = decryptData(data, encryptionKey);
+        
+        if (decrypted && decrypted.recipient && decrypted.amount) {
+          setPaymentData(decrypted);
+          setStep("confirm");
+          return;
+        }
+      } catch (e) {
+        console.log(`Failed to decrypt with key ${i}`);
       }
-    } catch (e) {
-      console.log("Not encrypted with QR key, trying Bluetooth key");
-    }
-    
-    // Try Bluetooth encryption key if QR key failed
-    try {
-      const encryptionKey = deriveMasterKey(
-        import.meta.env.VITE_BLUETOOTH_ENCRYPTION_SECRET,
-        import.meta.env.VITE_BLUETOOTH_SALT
-      );
-      const decrypted = decryptData(data, encryptionKey);
-      
-      if (decrypted && decrypted.recipient && decrypted.amount) {
-        setPaymentData(decrypted);
-        setStep("confirm");
-        return;
-      }
-    } catch (e) {
-      console.log("Not encrypted data, trying plain JSON");
     }
 
     // Fallback to plain JSON
@@ -211,24 +120,6 @@ const SendMoney = () => {
     }
   };
 
-  const handlePasteFromClipboard = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      setManualEntry(text);
-      toast({
-        title: "Pasted from clipboard",
-        description: "Payment data has been pasted",
-      });
-    } catch (err) {
-      console.error('Failed to read clipboard:', err);
-      toast({
-        title: "Clipboard Error",
-        description: "Could not access clipboard",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleCompletePayment = async () => {
     try {
       if (!paymentData || !user?.email) {
@@ -238,9 +129,9 @@ const SendMoney = () => {
       setIsSending(true);
       
       const result = await sendMoney({
-        sender: user.email,          // Current user is the sender
+        sender: user.email,
         amount: paymentData.amount,
-        recipient: paymentData.recipient, // Recipient from QR/NFC data
+        recipient: paymentData.recipient,
         note: paymentData.note || "",
         type: paymentData.type || "qr"
       });
@@ -268,19 +159,18 @@ const SendMoney = () => {
     setManualEntry("");
     setStep("type");
     setError(null);
-    setNfcStatus("waiting");
-    setBluetoothStatus("waiting");
+    setScanning(false);
   };
 
   return (
     <Layout>
       <div className="px-6 pt-6 pb-4 border-b border-gray-100">
         <div className="flex items-center gap-4 max-w-6xl mx-auto">
-          {step !== "type" && step !== "scan" && step !== "manual" && (
+          {step !== "type" && (
             <Button 
               variant="ghost" 
               size="icon" 
-              onClick={() => setStep(manualEntry ? "manual" : "scan")}
+              onClick={() => step === "success" ? resetForm() : setStep("type")}
               className="text-gray-500 hover:bg-gray-100"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -318,37 +208,6 @@ const SendMoney = () => {
                       <div>
                         <h3 className="font-medium text-dark">Scan QR Code</h3>
                         <p className="text-sm text-dark-lighter">Scan a QR code from the recipient's device</p>
-                      </div>
-                    </div>
-                  </button>
-                  
-                  <button
-                    onClick={() => setStep("scan")}
-                    className="p-6 border rounded-lg text-left hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Nfc size={24} className="text-greenleaf-600" />
-                      <div>
-                        <h3 className="font-medium text-dark">NFC Transfer</h3>
-                        <p className="text-sm text-dark-lighter">Hold your device close to the recipient's device</p>
-                      </div>
-                    </div>
-                  </button>
-                  
-                  <button
-                    onClick={() => startBluetoothListener()}
-                    className="p-6 border rounded-lg text-left hover:bg-gray-50 transition-colors"
-                    disabled={!isBluetoothSupported}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Bluetooth size={24} className={isBluetoothSupported ? "text-blue-600" : "text-gray-400"} />
-                      <div>
-                        <h3 className="font-medium text-dark">Bluetooth Transfer</h3>
-                        <p className="text-sm text-dark-lighter">
-                          {isBluetoothSupported 
-                            ? "Connect to recipient's device via Bluetooth" 
-                            : "Bluetooth not supported on this device"}
-                        </p>
                       </div>
                     </div>
                   </button>
@@ -419,31 +278,14 @@ const SendMoney = () => {
                       className="min-h-[200px]"
                     />
                   </div>
-                  
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      onClick={handlePasteFromClipboard}
-                      className="gap-2"
-                    >
-                      <ClipboardPaste size={16} />
-                      Paste from Clipboard
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setManualEntry("")}
-                    >
-                      Clear
-                    </Button>
-                  </div>
                 </div>
                 
                 <div className="flex gap-4 justify-end pt-4">
                   <Button 
                     variant="outline" 
-                    onClick={() => setStep("scan")}
+                    onClick={() => setStep("type")}
                   >
-                    Back to Scanner
+                    Back
                   </Button>
                   <GreenButton 
                     onClick={handleManualEntrySubmit}
@@ -462,12 +304,6 @@ const SendMoney = () => {
                 <h2 className="text-xl font-semibold text-dark mb-2 text-center">
                   Confirm Payment
                 </h2>
-                
-                {error && (
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
-                    {error}
-                  </div>
-                )}
                 
                 <div className="p-6 bg-gray-50 rounded-lg space-y-4">
                   <div className="flex justify-between">
@@ -493,7 +329,7 @@ const SendMoney = () => {
                 <div className="flex gap-4 justify-end">
                   <Button 
                     variant="outline" 
-                    onClick={() => setStep(manualEntry ? "manual" : "scan")}
+                    onClick={() => setStep("type")}
                   >
                     Cancel
                   </Button>

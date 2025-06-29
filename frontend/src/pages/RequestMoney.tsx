@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, QrCode, ArrowLeft, Scan, ClipboardPaste, Nfc, Bluetooth } from "lucide-react";
+import { ArrowLeft, QrCode, Nfc, Bluetooth } from "lucide-react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import GreenButton from "@/components/GreenButton";
 import { useAuth } from "@/contexts/AuthContext";
-import { encryptData, decryptData, deriveMasterKey } from '@/utils/crypto';
+import { encryptData, deriveMasterKey } from '@/utils/crypto';
 import WhiteCard from "@/components/WhiteCard";
 import { useWallet } from "@/contexts/WalletContext";
 import { useNavigate } from "react-router-dom";
@@ -22,15 +22,13 @@ const RequestMoney = () => {
   const { user } = useAuth();
   const { isLoading } = useWallet();
   const navigate = useNavigate();
-  const [step, setStep] = useState<"form" | "qr" | "nfc" | "bluetooth" | "success">("form");
+  const [step, setStep] = useState<"form" | "qr" | "success">("form");
   const [amount, setAmount] = useState<number>(0);
   const [note, setNote] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [encryptedData, setEncryptedData] = useState<string>("");
-  const [nfcStatus, setNfcStatus] = useState<"waiting" | "ready" | "sending" | "success" | "error">("waiting");
-  const [bluetoothStatus, setBluetoothStatus] = useState<"waiting" | "scanning" | "connecting" | "success" | "error">("waiting");
   const { initNFC, sendViaNFC, isNFCAvailable } = useNFC();
-  const { isSupported: isBluetoothSupported, requestDevice, connectToDevice } = useBluetooth();
+  const { isSupported: isBluetoothSupported } = useBluetooth();
 
   // Initialize NFC
   useEffect(() => {
@@ -43,7 +41,7 @@ const RequestMoney = () => {
     };
     
     setupNFC();
-  }, []);
+  }, [initNFC]);
 
   const handleGenerateQR = async () => {
     try {
@@ -67,8 +65,8 @@ const RequestMoney = () => {
 
       // Encrypt the data
       const encryptionKey = deriveMasterKey(
-        import.meta.env.VITE_QR_ENCRYPTION_SECRET,
-        import.meta.env.VITE_QR_SALT
+        import.meta.env.VITE_QR_ENCRYPTION_SECRET || "default-secret",
+        import.meta.env.VITE_QR_SALT || "default-salt"
       );
       
       const encrypted = encryptData(requestData, encryptionKey);
@@ -90,148 +88,11 @@ const RequestMoney = () => {
     }
   };
 
-  const handleNFCRequest = async () => {
-    try {
-      if (!user?.email) {
-        throw new Error("User not authenticated");
-      }
-
-      if (amount <= 0) {
-        throw new Error("Please enter a valid amount");
-      }
-
-      setNfcStatus("ready");
-      
-      // Create payment request data
-      const requestData = {
-        recipient: user.email,
-        amount,
-        note,
-        type: "nfc",
-        timestamp: Date.now(),
-        expiry: Date.now() + 300000 // 5 minutes
-      };
-
-      // Encrypt the data
-      const encryptionKey = deriveMasterKey(
-        import.meta.env.VITE_NFC_ENCRYPTION_SECRET,
-        import.meta.env.VITE_NFC_SALT
-      );
-      
-      const encrypted = encryptData(requestData, encryptionKey);
-      
-      toast({
-        title: "NFC Ready",
-        description: "Hold your device near the sender's device",
-      });
-
-      setNfcStatus("sending");
-      const success = await sendViaNFC(encrypted);
-      
-      if (success) {
-        setNfcStatus("success");
-        toast({
-          title: "Request Sent",
-          description: "Payment request sent successfully via NFC",
-        });
-        setStep("success");
-      } else {
-        throw new Error("Failed to send NFC data");
-      }
-    } catch (err) {
-      setNfcStatus("error");
-      const errorMessage = err instanceof Error ? err.message : "Failed to send via NFC";
-      setError(errorMessage);
-      toast({
-        title: "NFC Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleBluetoothRequest = async () => {
-    try {
-      if (!user?.email) {
-        throw new Error("User not authenticated");
-      }
-
-      if (amount <= 0) {
-        throw new Error("Please enter a valid amount");
-      }
-
-      setBluetoothStatus("scanning");
-      
-      // Create payment request data
-      const requestData = {
-        recipient: user.email,
-        amount,
-        note,
-        type: "bluetooth",
-        timestamp: Date.now(),
-        expiry: Date.now() + 300000 // 5 minutes
-      };
-
-      // Encrypt the data
-      const encryptionKey = deriveMasterKey(
-        import.meta.env.VITE_BLUETOOTH_ENCRYPTION_SECRET,
-        import.meta.env.VITE_BLUETOOTH_SALT
-      );
-      
-      const encrypted = encryptData(requestData, encryptionKey);
-      
-      toast({
-        title: "Scanning for Bluetooth devices",
-        description: "Please select the sender's device",
-      });
-
-      const device = await requestDevice({
-        acceptAllDevices: true,
-        optionalServices: ['00001234-0000-1000-8000-00805f9b34fb']
-      });
-
-      setBluetoothStatus("connecting");
-      
-      toast({
-        title: "Connecting to device",
-        description: "Please wait while we connect to the selected device",
-      });
-
-      const server = await connectToDevice(device);
-      const service = await server.getPrimaryService('00001234-0000-1000-8000-00805f9b34fb');
-      const characteristic = await service.getCharacteristic('00001234-0000-1000-8000-00805f9b34fb');
-      
-      // Convert string to ArrayBuffer
-      const encoder = new TextEncoder();
-      const data = encoder.encode(encrypted);
-      
-      await characteristic.writeValue(data);
-      
-      setBluetoothStatus("success");
-      toast({
-        title: "Request Sent",
-        description: "Payment request sent successfully via Bluetooth",
-      });
-      setStep("success");
-    } catch (err) {
-      setBluetoothStatus("error");
-      const errorMessage = err instanceof Error ? err.message : "Failed to send via Bluetooth";
-      setError(errorMessage);
-      toast({
-        title: "Bluetooth Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    }
-  };
-
   const resetForm = () => {
     setAmount(0);
     setNote("");
     setStep("form");
     setError(null);
-    setNfcStatus("waiting");
-    setBluetoothStatus("waiting");
   };
 
   return (
@@ -249,9 +110,7 @@ const RequestMoney = () => {
           )}
           <h1 className="text-2xl font-bold text-dark">
             {step === "form" ? "Request Money" : 
-             step === "qr" ? "QR Code Request" :
-             step === "nfc" ? "NFC Request" :
-             step === "bluetooth" ? "Bluetooth Request" : "Request Sent"}
+             step === "qr" ? "QR Code Request" : "Request Sent"}
           </h1>
         </div>
       </div>
@@ -319,42 +178,6 @@ const RequestMoney = () => {
                       <div>
                         <h3 className="font-medium text-dark">QR Code</h3>
                         <p className="text-sm text-dark-lighter">Generate a QR code for the sender to scan</p>
-                      </div>
-                    </div>
-                  </button>
-                  
-                  <button
-                    onClick={handleNFCRequest}
-                    className="p-6 border rounded-lg text-left hover:bg-gray-50 transition-colors"
-                    disabled={!isNFCAvailable || amount <= 0 || isLoading}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Nfc size={24} className={isNFCAvailable ? "text-greenleaf-600" : "text-gray-400"} />
-                      <div>
-                        <h3 className="font-medium text-dark">NFC Transfer</h3>
-                        <p className="text-sm text-dark-lighter">
-                          {isNFCAvailable 
-                            ? "Hold your device close to the sender's device" 
-                            : "NFC not supported on this device"}
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                  
-                  <button
-                    onClick={handleBluetoothRequest}
-                    className="p-6 border rounded-lg text-left hover:bg-gray-50 transition-colors"
-                    disabled={!isBluetoothSupported || amount <= 0 || isLoading}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Bluetooth size={24} className={isBluetoothSupported ? "text-blue-600" : "text-gray-400"} />
-                      <div>
-                        <h3 className="font-medium text-dark">Bluetooth Transfer</h3>
-                        <p className="text-sm text-dark-lighter">
-                          {isBluetoothSupported 
-                            ? "Connect to sender's device via Bluetooth" 
-                            : "Bluetooth not supported on this device"}
-                        </p>
                       </div>
                     </div>
                   </button>
