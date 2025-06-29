@@ -1,10 +1,12 @@
+// frontend/src/contexts/wallet/useWalletState.ts
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
-import * as walletService from "./WalletService";
+import * as walletService from "./WalletService"
 import { useAuth } from "./AuthContext";
 import { useOfflineBalance } from "./OfflineBalanceContext";
 
 import { Transaction, SendMoneyParams, WalletContextType } from "./types";
+
 
 export const useWalletState = (): WalletContextType => {
   const { toast } = useToast();
@@ -17,53 +19,39 @@ export const useWalletState = (): WalletContextType => {
   const [error, setError] = useState<string | null>(null);
 
   const handleError = useCallback((err: unknown, defaultMessage: string) => {
-    const errorMessage = err instanceof Error ? err.message : defaultMessage;
-    setError(errorMessage);
+    setError(defaultMessage);
     console.error(defaultMessage, err);
     toast({
       title: "Error",
-      description: errorMessage,
+      description: defaultMessage,
       variant: "destructive",
     });
   }, [toast]);
 
   const fetchWalletData = useCallback(async () => {
-    if (!user?.email) return;
-    
     setIsLoading(true);
     setError(null);
     try {
-      const data = await walletService.fetchWalletData(user.email);
+      const data = await walletService.fetchWalletData();
       setBalance(data.balance);
       setReservedBalance(data.reservedBalance);
-      setTransactions(data.transactions || []);
+      setTransactions(data.transactions);
     } catch (err) {
       handleError(err, "Failed to fetch wallet data");
     } finally {
       setIsLoading(false);
     }
-  }, [handleError, user?.email]);
+  }, [handleError]);
 
   useEffect(() => {
-    if (user?.email) {
-      fetchWalletData();
-    }
-  }, [fetchWalletData, user?.email]);
+    fetchWalletData();
+  }, [fetchWalletData]);
 
   const reserveTokens = useCallback(async (amount: number) => {
-    if (!user?.email) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to reserve tokens",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     if (amount <= 0) {
       toast({
         title: "Invalid Amount",
-        description: "Please enter a positive amount to reserve",
+        description: "Please enter a positive amount to reserve.",
         variant: "destructive",
       });
       return;
@@ -71,38 +59,28 @@ export const useWalletState = (): WalletContextType => {
 
     setIsLoading(true);
     try {
-      const { reservedBalance: newReservedBalance } = await walletService.reserveTokens(amount, user.email);
-      setReservedBalance(newReservedBalance);
-      setBalance(prev => prev - amount);
+      const { reservedBalance } = await walletService.reserveTokens(amount);
+      setReservedBalance(reservedBalance);
       
       // Refresh the offline balance to reflect the reserved tokens
       await refreshOfflineBalance();
       
       toast({
         title: "Tokens Reserved",
-        description: `$${amount.toFixed(2)} has been reserved for offline use`,
+        description: `$${amount.toFixed(2)} has been reserved for offline use.`,
       });
     } catch (err) {
       handleError(err, "Failed to reserve tokens");
     } finally {
       setIsLoading(false);
     }
-  }, [handleError, toast, refreshOfflineBalance, user?.email]);
+  }, [handleError, toast, refreshOfflineBalance]);
 
   const releaseTokens = useCallback(async (amount: number) => {
-    if (!user?.email) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to release tokens",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     if (amount <= 0) {
       toast({
         title: "Invalid Amount",
-        description: "Please enter a positive amount to release",
+        description: "Please enter a positive amount to release.",
         variant: "destructive",
       });
       return;
@@ -110,34 +88,24 @@ export const useWalletState = (): WalletContextType => {
 
     setIsLoading(true);
     try {
-      const { reservedBalance: newReservedBalance } = await walletService.releaseTokens(amount, user.email);
-      setReservedBalance(newReservedBalance);
-      setBalance(prev => prev + amount);
+      const { reservedBalance } = await walletService.releaseTokens(amount);
+      setReservedBalance(reservedBalance);
       
       // Refresh the offline balance to reflect the released tokens
       await refreshOfflineBalance();
       
       toast({
         title: "Tokens Released",
-        description: `$${amount.toFixed(2)} has been returned to your main balance`,
+        description: `$${amount.toFixed(2)} has been returned to your main balance.`,
       });
     } catch (err) {
       handleError(err, "Failed to release tokens");
     } finally {
       setIsLoading(false);
     }
-  }, [handleError, toast, refreshOfflineBalance, user?.email]);
+  }, [handleError, toast, refreshOfflineBalance]);
 
   const addTransaction = useCallback(async (transaction: Omit<Transaction, "id" | "date">) => {
-    if (!user?.email) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to add transactions",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     setIsLoading(true);
     try {
       const { transaction: newTransaction } = await walletService.addTransaction(transaction);
@@ -163,22 +131,13 @@ export const useWalletState = (): WalletContextType => {
     } finally {
       setIsLoading(false);
     }
-  }, [handleError, toast, user?.email]);
+  }, [handleError, toast]);
 
   const addFunds = useCallback(async (amount: number) => {
-    if (!user?.email) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to add funds",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     if (amount <= 0) {
       toast({
         title: "Invalid Amount",
-        description: "Please enter a positive amount to deposit",
+        description: "Please enter a positive amount to deposit.",
         variant: "destructive",
       });
       return;
@@ -186,57 +145,48 @@ export const useWalletState = (): WalletContextType => {
 
     setIsLoading(true);
     try {
-      const { balance: newBalance, transaction } = await walletService.addFunds(amount, user.email);
-      setBalance(newBalance);
+      const { balance, transaction } = await walletService.addFunds(amount);
+      setBalance(balance);
       if (transaction) {
         setTransactions(prev => [transaction, ...prev]);
       }
       toast({
         title: "Deposit Successful",
-        description: `$${amount.toFixed(2)} has been added to your account`,
+        description: `$${amount.toFixed(2)} has been added to your account.`,
       });
     } catch (err) {
       handleError(err, "Failed to add funds");
     } finally {
       setIsLoading(false);
     }
-  }, [handleError, toast, user?.email]);
+  }, [handleError, toast]);
 
-  const sendMoney = useCallback(async ({ sender, amount, recipient, note, type }: SendMoneyParams) => {
-    if (!user?.email) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to send money",
-        variant: "destructive",
-      });
-      return null;
-    }
-    
+  const sendMoney = useCallback(async ({ sender: email, amount, recipient, note, type }: SendMoneyParams) => {
     if (amount <= 0) {
       toast({
         title: "Invalid Amount",
-        description: "Please enter a positive amount to send",
+        description: "Please enter a positive amount to send.",
         variant: "destructive",
       });
-      return null;
+      return null;  // Return null if amount is invalid
     }
   
     setIsLoading(true);
     try {
-      const { balance: newBalance, reservedBalance: newReservedBalance, transaction } = await walletService.sendMoney({
-        sender,
+      const { balance, reservedBalance, transaction } = await walletService.sendMoney({
+        sender: email,
         amount,
         recipient,
         note,
         type
       });
   
-      if (!transaction) {
-        throw new Error("Failed to process the transaction. No transaction data returned.");
+      if (!transaction || balance === undefined || reservedBalance === undefined) {
+        throw new Error("Failed to process the transaction. Missing data.");
       }
   
-      setBalance(newBalance !== undefined ? newBalance : balance);
-      setReservedBalance(newReservedBalance !== undefined ? newReservedBalance : reservedBalance);
+      setBalance(balance);
+      setReservedBalance(reservedBalance);
       setTransactions(prev => [transaction, ...prev]);
   
       toast({
@@ -244,14 +194,14 @@ export const useWalletState = (): WalletContextType => {
         description: `$${amount.toFixed(2)} sent to ${recipient}`,
       });
   
-      return transaction;
+      return transaction;  // Return the transaction object on success
     } catch (err) {
       handleError(err, "Failed to send money");
-      return null;
+      return null;  // Return null if an error occurred
     } finally {
       setIsLoading(false);
     }
-  }, [handleError, toast, user?.email, balance, reservedBalance]);
+  }, [handleError, toast]);
   
   return {
     balance,

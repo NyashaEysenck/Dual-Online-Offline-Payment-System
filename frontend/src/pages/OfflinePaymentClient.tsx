@@ -17,7 +17,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { checkOnlineStatus } from '@/utils/connectivity';
-import { v4 as uuidv4 } from 'uuid';
 
 const OfflinePaymentClient: React.FC = () => {
   const { user } = useAuth();
@@ -35,8 +34,8 @@ const OfflinePaymentClient: React.FC = () => {
   const [isOnline, setIsOnline] = useState(false);
   const [checkingOnlineStatus, setCheckingOnlineStatus] = useState(false);
   
-  const { addItem } = useIndexedDB({
-    dbName: 'greenleaf-finance',
+  const { addItem, error: dbError } = useIndexedDB({
+    dbName: 'offlinePayments',
     storeName: 'transactions',
   });
 
@@ -76,12 +75,14 @@ const OfflinePaymentClient: React.FC = () => {
     try {
       // Validate URL format
       const url = new URL(data);
-      // Accept both HTTP and HTTPS protocols
+      // Accept both HTTP and HTTPS protocols, but prefer HTTPS
       if (url.protocol !== 'http:' && url.protocol !== 'https:') {
         throw new Error('Invalid URL protocol');
       }
       
-      setServerUrl(data);
+      // Ensure we're using HTTPS for secure connections
+      const secureUrl = data.replace('http://', 'https://');
+      setServerUrl(secureUrl);
       setScanning(false);
       setStep('confirm');
       setError(null);
@@ -120,31 +121,41 @@ const OfflinePaymentClient: React.FC = () => {
       return;
     }
     
-    if (!user?.email) {
-      setError('User authentication required');
-      return;
-    }
-    
     setLoading(true);
     setError(null);
     
     try {
       // Get the server user's email from the QR code URL
+      // In a real app, this would be more secure, but for demo purposes
+      // we'll extract it from the URL or use a default
       const urlObj = new URL(serverUrl);
       const serverUserEmail = urlObj.searchParams.get('user') || 'server-user';
       
-      // Generate unique IDs
-      const transactionId = `tx_${uuidv4()}`;
-      const receiptId = `rcpt_${uuidv4()}`;
-      
-      // Create transaction object
-      const transaction: Transaction = {
-        id: transactionId,
-        sender: user.email,
-        recipient: serverUserEmail,
-        amount: amount as number,
+      const paymentData = {
+        sender: user?.email || 'anonymous-user',
+        recipient: serverUserEmail, 
+        amount: amount,
         note: note,
         timestamp: Date.now(),
+        type: 'offline',
+      };
+      
+      console.log('Submitting payment data:', paymentData);
+      
+      // Generate a unique transaction ID
+      const transactionId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      
+      // Generate a unique receipt ID
+      const receiptId = `rcpt_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      
+      // Create a transaction object
+      const transaction: Transaction = {
+        id: transactionId,
+        sender: paymentData.sender,
+        recipient: paymentData.recipient,
+        amount: paymentData.amount as number,
+        note: paymentData.note,
+        timestamp: paymentData.timestamp,
         receiptId: receiptId,
         status: 'completed',
         type: 'offline',
@@ -159,6 +170,8 @@ const OfflinePaymentClient: React.FC = () => {
       await refreshOfflineBalance();
       
       // Try to send to the server
+      let serverResponse = null;
+      
       try {
         // Try the new API endpoint first
         const response = await fetch(`${serverUrl}/api/payments`, {
@@ -168,25 +181,44 @@ const OfflinePaymentClient: React.FC = () => {
             'Access-Control-Allow-Origin': '*',
           },
           body: JSON.stringify({
-            sender: user.email,
-            recipient: serverUserEmail,
-            amount: amount,
-            note: note,
-            timestamp: Date.now(),
+            ...paymentData,
             id: transactionId,
             receiptId: receiptId,
-            type: 'offline',
+            status: 'completed',
           }),
         });
         
         if (!response.ok) {
-          throw new Error(`Server responded with status: ${response.status}`);
+          // If the new endpoint fails, try the legacy endpoint
+          const legacyResponse = await fetch(`${serverUrl}/api/transactions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            },
+            body: JSON.stringify({
+              ...paymentData,
+              id: transactionId,
+              receiptId: receiptId,
+              status: 'completed',
+            }),
+          });
+          
+          if (!legacyResponse.ok) {
+            throw new Error(`Server responded with status: ${legacyResponse.status}`);
+          }
+          
+          const data = await legacyResponse.json();
+          console.log('Payment successful (legacy API):', data);
+          serverResponse = data;
+        } else {
+          const data = await response.json();
+          console.log('Payment successful:', data);
+          serverResponse = data;
         }
-        
-        const data = await response.json();
-        console.log('Payment successful:', data);
       } catch (serverError) {
         console.error('Error sending to server, but transaction saved locally:', serverError);
+        // We don't throw here because we've already saved to IndexedDB
         toast({
           variant: "default",
           title: "Offline Transaction",

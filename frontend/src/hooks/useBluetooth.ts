@@ -21,7 +21,7 @@ export const useBluetooth = () => {
       const available = await navigator.bluetooth.getAvailability();
       setIsAvailable(available);
       
-      navigator.bluetooth.addEventListener('availabilitychanged', (event: any) => {
+      navigator.bluetooth.addEventListener('availabilitychanged', (event) => {
         setIsAvailable(event.value);
       });
     } catch (err) {
@@ -30,15 +30,10 @@ export const useBluetooth = () => {
   };
 
   const requestDevice = async (options: RequestDeviceOptions) => {
-    if (!isSupported) {
-      throw new Error("Bluetooth is not supported on this device");
-    }
-    
     try {
       return await navigator.bluetooth.requestDevice(options);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to request Bluetooth device";
-      throw new Error(errorMessage);
+      throw new Error("Failed to request Bluetooth device");
     }
   };
 
@@ -48,8 +43,7 @@ export const useBluetooth = () => {
       if (!server) throw new Error("Failed to connect to device");
       return server;
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to connect to Bluetooth device";
-      throw new Error(errorMessage);
+      throw new Error("Failed to connect to Bluetooth device");
     }
   };
 

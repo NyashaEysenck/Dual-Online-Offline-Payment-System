@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Camera, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@mui/material";
 import jsQR from "jsqr";
 
 interface QRScannerProps {
@@ -119,43 +119,85 @@ const QrScanner = ({ onScan, onError, onCancel }: QRScannerProps) => {
   }, []);
 
   return (
-    <div className="flex flex-col items-center">
-      <div className="relative w-full max-w-md aspect-square bg-gray-100 rounded-lg overflow-hidden mb-4">
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ 
+        position: 'relative', 
+        width: '100%', 
+        maxWidth: '300px', 
+        aspectRatio: '1/1', 
+        backgroundColor: '#f0f0f0', 
+        borderRadius: '8px', 
+        overflow: 'hidden', 
+        marginBottom: '16px' 
+      }}>
         {scanning ? (
           <>
             <video 
               ref={videoRef} 
-              className="w-full h-full object-cover"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               autoPlay 
               playsInline
               muted
             />
-            <canvas ref={canvasRef} className="hidden" />
-            <div className="absolute inset-0 border-2 border-greenleaf-500 rounded-lg opacity-50">
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-3/4 border-2 border-greenleaf-500 rounded-lg"></div>
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+            <div style={{ 
+              position: 'absolute', 
+              inset: 0, 
+              border: '2px solid #4caf50', 
+              borderRadius: '8px',
+              opacity: 0.5 
+            }}>
+              <div style={{ 
+                position: 'absolute', 
+                top: '50%', 
+                left: '50%', 
+                transform: 'translate(-50%, -50%)', 
+                width: '75%', 
+                height: '75%', 
+                border: '2px solid #4caf50', 
+                borderRadius: '8px' 
+              }}></div>
               
-              {/* Scanning indicator */}
-              <div className="absolute top-0 left-0 w-full h-0.5 bg-greenleaf-500 opacity-70 animate-scanline"></div>
+              {/* Simple scanning indicator */}
+              <div style={{ 
+                position: 'absolute', 
+                top: 0, 
+                left: 0, 
+                width: '100%', 
+                height: '2px', 
+                backgroundColor: '#4caf50', 
+                opacity: 0.7,
+                animation: 'scanline 2s linear infinite'
+              }}></div>
             </div>
           </>
         ) : (
-          <div className="h-full flex flex-col items-center justify-center">
-            <Camera size={48} className="text-gray-400 mb-2" />
-            <p className="text-sm text-gray-500">Camera is inactive</p>
+          <div style={{ 
+            height: '100%', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center' 
+          }}>
+            <Camera size={48} style={{ color: '#9e9e9e', marginBottom: '8px' }} />
+            <p style={{ fontSize: '14px', color: '#757575' }}>Camera is inactive</p>
           </div>
         )}
       </div>
 
       {error && (
-        <p className="text-red-500 text-sm mb-4 text-center">{error}</p>
+        <p style={{ color: '#f44336', fontSize: '14px', marginBottom: '16px', textAlign: 'center' }}>{error}</p>
       )}
 
-      <Button 
-        onClick={stopScanner} 
-        variant="default"
-        className="bg-greenleaf-500 hover:bg-greenleaf-600 text-white"
-      >
-        <RefreshCw className="mr-2 h-4 w-4" />
+      <style>{`
+        @keyframes scanline {
+          0% { transform: translateY(0); }
+          50% { transform: translateY(calc(100% - 4px)); }
+          100% { transform: translateY(0); }
+        }
+      `}</style>
+      <Button onClick={stopScanner} variant="contained" style={{ backgroundColor: '#4caf50', color: '#fff' }}>
+        <RefreshCw style={{ marginRight: '8px' }} />
         Stop Scanner
       </Button>
     </div>

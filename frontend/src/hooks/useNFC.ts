@@ -1,37 +1,21 @@
-import { useState, useEffect } from "react";
+// hooks/useNFC.ts
+import { useState } from "react";
 
 export const useNFC = () => {
   const [isNFCAvailable, setIsNFCAvailable] = useState(false);
 
-  // Check if NFC is available
-  useEffect(() => {
-    setIsNFCAvailable('NDEFReader' in window);
-  }, []);
-
   const initNFC = async () => {
-    if (!isNFCAvailable) {
-      return false;
-    }
-    
-    try {
-      // Just check if we can create an NDEFReader instance
-      // @ts-ignore - TypeScript doesn't have NDEFReader types by default
-      new window.NDEFReader();
+    if ('NDEFReader' in window) {
+      setIsNFCAvailable(true);
       return true;
-    } catch (err) {
-      console.error("NFC initialization error:", err);
-      return false;
     }
+    return false;
   };
 
   const sendViaNFC = async (data: string) => {
-    if (!isNFCAvailable) {
-      return false;
-    }
-    
     try {
       // @ts-ignore - NDEFReader not in TS types
-      const writer = new window.NDEFReader();
+      const writer = new NDEFReader();
       await writer.write({
         records: [{ recordType: "text", data }]
       });
@@ -43,13 +27,9 @@ export const useNFC = () => {
   };
 
   const readFromNFC = async (): Promise<string | null> => {
-    if (!isNFCAvailable) {
-      return null;
-    }
-    
     try {
       // @ts-ignore - NDEFReader not in TS types
-      const reader = new window.NDEFReader();
+      const reader = new NDEFReader();
       
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {

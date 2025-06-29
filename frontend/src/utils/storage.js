@@ -1,7 +1,8 @@
+
 const DB_NAME = 'AuthDB';
 const STORE_NAME = 'users';
 
-// Connection pooling
+// Connection pooling remains exactly the same
 let dbConnection = null;
 
 const openDB = () => {
@@ -36,8 +37,18 @@ const openDB = () => {
 
 export const saveUser = async (email, user) => {
   try {
+    console.log("Saving user:", user);
     const db = await openDB();
+    console.log("DB opened successfully:", db);
     
+    // Check if the user exists before saving
+    const existingUser = await getUser(email);
+    if (existingUser) {
+      console.log("User already exists, updating data.");
+    } else {
+      console.log("User does not exist, saving new data.");
+    }
+
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
@@ -45,14 +56,13 @@ export const saveUser = async (email, user) => {
       const userToStore = {
         email: email,
         crypto_salt: user.crypto_salt,
-        encryptedData: user.encryptedData,
-        // Store JWT token
-        token: localStorage.getItem('authToken')
+        encryptedData: user.encryptedData
       };
+    
       
       const request = store.put(userToStore);
       
-      request.onsuccess = () => resolve(userToStore);
+      request.onsuccess = () =>  resolve(userToStore); // C
       request.onerror = () => reject(request.error);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
@@ -63,26 +73,45 @@ export const saveUser = async (email, user) => {
   }
 };
 
+export const debugListAllUsers = async () => {
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+    
+    request.onsuccess = () => {
+      console.log('All users in database:', request.result);
+      resolve(request.result);
+    };
+  });
+};
+
+// Updated to match the expected data structure
 export const getUser = async (email) => {
+ 
   try {
+    console.log(`Attempting to get user with email: ${email}`);
     const db = await openDB();
+    console.log('Database connection established');
     
     return new Promise((resolve) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
+      console.log('Transaction created');
+      
       const store = tx.objectStore(STORE_NAME);
+      console.log('Object store accessed');
+      
       const request = store.get(email);
+      console.log('Get request initiated for email:', email);
       
       request.onsuccess = () => {
+        console.log('Get request succeeded, result:', request.result);
         if (!request.result) {
+          console.log('No user found with this email');
           resolve(null);
           return;
         }
-        
-        // If we have a token in storage, update localStorage
-        if (request.result.token) {
-          localStorage.setItem('authToken', request.result.token);
-        }
-        
         resolve({
           email: request.result.email,
           crypto_salt: request.result.crypto_salt,
@@ -100,7 +129,7 @@ export const getUser = async (email) => {
     return null;
   }
 };
-
+// clearUserStorage remains exactly the same
 export const clearUserStorage = async () => {
   try {
     const db = await openDB();
@@ -110,32 +139,11 @@ export const clearUserStorage = async () => {
       
       const request = store.clear();
       
-      request.onsuccess = () => {
-        // Also clear localStorage
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('lastEmail');
-        sessionStorage.removeItem('sessionUser');
-        resolve();
-      };
+      request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
     console.error("Error clearing user storage:", error);
     throw error;
   }
-};
-
-// Helper function to list all users (for debugging)
-export const debugListAllUsers = async () => {
-  const db = await openDB();
-  return new Promise((resolve) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.getAll();
-    
-    request.onsuccess = () => {
-      console.log('All users in database:', request.result);
-      resolve(request.result);
-    };
-  });
 };

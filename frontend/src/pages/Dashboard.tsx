@@ -7,7 +7,6 @@ import TransactionItem from "@/components/TransactionItem";
 import GreenButton from "@/components/GreenButton";
 import { useWallet } from "@/contexts/WalletContext";
 import { useOfflineBalance } from "@/contexts/OfflineBalanceContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { 
   ArrowUpRight, 
   ArrowDownLeft, 
@@ -18,15 +17,13 @@ import {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { balance, reservedBalance, transactions, fetchWalletData } = useWallet();
+  const { balance, reservedBalance, transactions } = useWallet();
   const { offlineBalance, pendingTransactions, refreshOfflineBalance } = useOfflineBalance();
-  const { user } = useAuth();
 
-  // Fetch wallet data and refresh offline balance when component mounts
+  // Refresh offline balance when component mounts
   useEffect(() => {
-    fetchWalletData();
     refreshOfflineBalance();
-  }, [fetchWalletData, refreshOfflineBalance]);
+  }, []);
 
   // Available balance is now the actual balance
   const availableBalance = balance;
@@ -36,17 +33,15 @@ const Dashboard = () => {
   
   // Get recent transactions (last 5)
   const recentTransactions = useMemo(() => {
-    if (!transactions || transactions.length === 0) return [];
-    
     return [...transactions]
       .map(tx => ({
         ...tx,
-        created_at: new Date(tx.created_at), // Ensure it's a Date
-        currentUserId: user?._id || "" // Add current user ID for display logic
+        created_at: new Date(tx.created_at), // ✅ Ensure it's a Date
       }))
       .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
       .slice(0, 5);
-  }, [transactions, user?._id]);
+  }, [transactions]);
+  
 
   return (
     <Layout>
@@ -57,13 +52,13 @@ const Dashboard = () => {
             <h2 className="text-xl font-semibold text-dark mb-6">Balance Summary</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <BalanceDisplay 
-                amount={totalBalance}
+                amount={totalBalance}  // Updated to reflect total balance
                 label="Total Balance" 
                 size="lg" 
                 type="primary" 
               />
               <BalanceDisplay 
-                amount={availableBalance}
+                amount={availableBalance} // Now the actual balance
                 label="Available Balance" 
                 size="md" 
                 type="secondary" 
@@ -152,8 +147,10 @@ const Dashboard = () => {
               recentTransactions.map((transaction) => (
                 <TransactionItem 
                   key={transaction.transaction_id} 
-                  transaction={transaction}
-                  onClick={() => navigate(`/transactions/${transaction.transaction_id}`)}
+                  transaction={{
+                    ...transaction,
+                    currentUserId: "user123" // You need to pass the current user's ID here
+                  }}
                 />
               ))
             ) : (

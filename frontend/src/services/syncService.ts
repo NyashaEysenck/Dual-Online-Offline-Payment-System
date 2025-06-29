@@ -1,5 +1,7 @@
+// services/syncService.ts
 import api from '@/utils/api';
 import { Transaction } from '@/hooks/useIndexedDB';
+import { toast } from '@/components/ui/use-toast';
 
 /**
  * Syncs offline transactions to the online database
@@ -15,10 +17,8 @@ export const syncOfflineTransactions = async (
   deleteTransaction: (id: string) => Promise<void>,
   refreshOfflineBalance?: () => Promise<void>
 ): Promise<{ synced: number; pending: number; failed: number }> => {
-  // Filter only offline transactions that haven't been synced
-  const offlineTransactions = transactions.filter(tx => 
-    tx.type === 'offline' && tx.synced !== true
-  );
+  // Filter only offline transactions
+  const offlineTransactions = transactions.filter(tx => tx.type === 'offline');
   
   if (offlineTransactions.length === 0) {
     return { synced: 0, pending: 0, failed: 0 };
@@ -59,18 +59,12 @@ export const syncOfflineTransactions = async (
         console.log(`Uploading transaction ${transaction.id} to online database`);
         
         const syncResponse = await api.post('/transactions/sync', {
-          id: transaction.id,
-          sender: transaction.sender,
-          recipient: transaction.recipient,
-          amount: transaction.amount,
-          note: transaction.note,
-          timestamp: transaction.timestamp,
-          receiptId: transaction.receiptId,
-          type: transaction.type
+          ...transaction,
+          status: 'pending' // Initially set as pending in online database
         });
         
-        if (syncResponse.status === 201 || syncResponse.status === 200) {
-          // Successfully synced to online database
+        if (syncResponse.status === 201) {
+          // Successfully synced to online database as pending
           const updatedTransaction = {
             ...transaction,
             status: 'pending' as const,
