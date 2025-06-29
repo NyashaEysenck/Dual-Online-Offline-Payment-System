@@ -11,10 +11,16 @@ const api = axios.create({
   xsrfHeaderName: 'X-XSRF-TOKEN'
 });
 
-// Add custom request interceptor to handle self-signed certificates
+// Add request interceptor to include JWT token
 api.interceptors.request.use(
   (config) => {
-    // Add any request headers or modifications here
+    // Get token from localStorage
+    const token = localStorage.getItem('authToken');
+    
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
     return config;
   },
   (error) => {
@@ -22,14 +28,26 @@ api.interceptors.request.use(
   }
 );
 
-// Add custom response interceptor to handle errors
+// Add response interceptor to handle token expiration
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid, clear it and redirect to login
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('lastEmail');
+      sessionStorage.removeItem('sessionUser');
+      
+      // Only redirect if we're not already on the login page
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+        window.location.href = '/login';
+      }
+    }
+    
     if (error.response) {
-      // Handle the error
       console.error('API Error:', error.response.data);
     }
+    
     return Promise.reject(error);
   }
 );

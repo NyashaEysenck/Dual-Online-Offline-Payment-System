@@ -9,12 +9,6 @@ import CryptoJS from 'crypto-js';
  */
 export const encryptData = (data, key) => {
   try {
-    // TEMPORARY BYPASS: Return JSON string directly for development
-    if (data && typeof data === 'object' && data.type === 'offline') {
-      console.log('ENCRYPTION BYPASSED for offline transaction:', data);
-      return JSON.stringify(data);
-    }
-    
     const jsonString = JSON.stringify(data);
     return CryptoJS.AES.encrypt(jsonString, key, {
       mode: CryptoJS.mode.CBC,
@@ -34,18 +28,6 @@ export const encryptData = (data, key) => {
  */
 export const decryptData = (ciphertext, key) => {
   try {
-    // TEMPORARY BYPASS: Check if this is a JSON string (not encrypted)
-    if (ciphertext && typeof ciphertext === 'string' && 
-        (ciphertext.startsWith('{') || ciphertext.startsWith('['))) {
-      try {
-        const parsed = JSON.parse(ciphertext);
-        console.log('DECRYPTION BYPASSED - direct JSON data:', parsed);
-        return parsed;
-      } catch (jsonError) {
-        // Not valid JSON, continue with normal decryption
-      }
-    }
-    
     // First check if the ciphertext looks valid
     if (!ciphertext || typeof ciphertext !== 'string' || ciphertext.length < 16) {
       throw new Error('Invalid ciphertext format');
@@ -87,11 +69,6 @@ export const decryptData = (ciphertext, key) => {
  * @returns {string} - Derived key
  */
 export const deriveMasterKey = (password, salt) => {
-  // For offline mode, provide a dummy key if needed
-  if (password === 'offline_bypass') {
-    return 'offline_master_key';
-  }
-  
   return CryptoJS.PBKDF2(password, salt, {
     keySize: 256 / 32,
     iterations: 10000,

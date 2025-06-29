@@ -48,8 +48,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const checkPersistedSession = async () => {
       try {
+        const token = localStorage.getItem('authToken');
         const lastEmail = localStorage.getItem('lastEmail');
-        if (lastEmail) {
+        
+        if (token && lastEmail) {
           const localUser = await getUser(lastEmail);
           if (localUser) {
             setUser(localUser);
@@ -57,6 +59,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       } catch (error) {
         console.error("Session check failed:", error);
+        // Clear invalid session data
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('lastEmail');
       } finally {
         setIsLoading(false);
       }
@@ -70,7 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     
     try {
       const localUser = await getUser(email);
-      console.log(localUser)
+      
       if (localUser && localUser.crypto_salt) {
         try {
           const encryptionKey = deriveMasterKey(password, localUser.crypto_salt);
@@ -88,7 +93,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const response = await api.post('/auth/login', { email, password });
-      const remoteUser = response.data.user;
+      const { user: remoteUser, token } = response.data;
+      
+      // Store the JWT token
+      localStorage.setItem('authToken', token);
       
       const salt = remoteUser.crypto_salt || generateSalt();
       const encryptionKey = deriveMasterKey(password, salt);
@@ -130,7 +138,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         crypto_salt: salt
       });
 
-      const remoteUser = response.data.user;
+      const { user: remoteUser, token } = response.data;
+      
+      // Store the JWT token
+      localStorage.setItem('authToken', token);
+      
       const encryptionKey = deriveMasterKey(password, salt);
       const encryptedUser = encryptData(remoteUser, encryptionKey);
       
@@ -159,7 +171,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [toast]);
 
   const logout = useCallback(() => {
-
+    localStorage.removeItem('authToken');
     localStorage.removeItem('lastEmail');
     sessionStorage.removeItem('sessionUser');
     setUser(null);

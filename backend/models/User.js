@@ -7,8 +7,7 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   balance: { type: Number, default: 0 },
   offline_credits: { type: Number, default: 0 },
-  // devices: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Device' }],
-  // currentChallenge: String,
+  crypto_salt: { type: String, default: null },
   createdAt: { type: Date, default: Date.now }
 });
 

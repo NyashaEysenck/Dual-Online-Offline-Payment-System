@@ -3,17 +3,29 @@ const User = require('../models/User');
 
 module.exports = async (req, res, next) => {
   try {
-    const token = req.header('Authorization').replace('Bearer ', '');
+    const authHeader = req.header('Authorization');
+    
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.userId);
 
     if (!user) {
-      throw new Error();
+      return res.status(401).json({ error: 'Invalid token' });
     }
 
     req.user = { userId: user._id };
     next();
   } catch (error) {
+    console.error('Auth middleware error:', error);
     res.status(401).json({ error: 'Please authenticate' });
   }
 };
